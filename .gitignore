@@ -10,6 +10,8 @@ bin/
 .idea/
 *.iml
 
+/src/main/java/lb/deleteFile
+
 # Operating-system files
 .DS_Store
 Thumbs.db
