@@ -38,9 +38,9 @@ public class ProxyServer {
 
         System.out.println("Load balancing policy: " + policy);
 
-        backends.add(new Backend("localhost", 8081));
-        backends.add(new Backend("localhost", 8082));
-        backends.add(new Backend("localhost", 8083));
+        backends.add(new Backend("worker1","worker1", 8081));
+        backends.add(new Backend("worker2","worker2", 8081));
+        backends.add(new Backend("worker3","worker3", 8081));
 
         startHealthChecks();
 
@@ -132,7 +132,12 @@ public class ProxyServer {
             }
 
 
-            status.append(backend.port)
+            status.append(backend.name)
+                    .append(" ")
+                    .append(backend.port)
+                    .append(" ")
+                    .append(backend.host)
+                    .append(" ")
                     .append(backend.healthy ? "UP" : "DOWN");
             status.append("\r\n");
         }
@@ -266,7 +271,7 @@ public class ProxyServer {
         Backend bestBackend = null;
 
         for (Backend backend : backends) {
-            if (backend.healthy) {
+            if (!backend.healthy) {
                 continue;
             }
 
@@ -341,11 +346,13 @@ public class ProxyServer {
         }
 
     private static class Backend {
+        private final String name;
         private final String host;
         private final int port;
         private volatile boolean healthy; //when a change happens in one thread it should let the other threads know to update and not use an old value
         private final AtomicInteger inFlightRequests;
-        private Backend(String host, int port) {
+        private Backend(String name, String host, int port) {
+            this.name = name;
             this.host = host;
             this.port = port;
             this.healthy = false;

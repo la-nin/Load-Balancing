@@ -1,0 +1,34 @@
+services:
+  proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.proxy
+    image: lb-proxy
+    container_name: lb-proxy
+    ports:
+      - "8080:8080"
+    depends_on:
+      - worker1
+      - worker2
+      - worker3
+
+  worker1:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    image: lb-worker
+    container_name: lb-worker-1
+    ports:
+      - "8081:8081"
+
+  worker2:
+    image: lb-worker
+    container_name: lb-worker-2
+    ports:
+      - "8082:8081"
+
+  worker3:
+    image: lb-worker
+    container_name: lb-worker-3
+    ports:
+      - "8083:8081"
