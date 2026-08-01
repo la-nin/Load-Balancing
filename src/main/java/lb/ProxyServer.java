@@ -9,6 +9,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ProxyServer {
     private static final int DEFAULT_PROXY_PORT = 8080;
@@ -19,8 +21,22 @@ public class ProxyServer {
     private static final List<Backend> backends = new ArrayList<>();
     private static int nextBackendIndex = 0;
 
+    private enum Policy {
+        ROUND_ROBIN,
+        LEAST_CONN,
+        RANDOM
+    }
+
+    private static Policy policy = Policy.ROUND_ROBIN;
+
     public static void main(String[] args) throws IOException {
         int proxyPort = DEFAULT_PROXY_PORT;
+
+        if (args.length > 0) {
+            policy = parsePolicy(args[0]);
+        }
+
+        System.out.println("Load balancing policy: " + policy);
 
         backends.add(new Backend("localhost", 8081));
         backends.add(new Backend("localhost", 8082));
@@ -46,6 +62,17 @@ public class ProxyServer {
         }
     }
 
+    private static Policy parsePolicy(String value) {
+        return switch (value.toLowerCase()) {
+            case "round_robin" -> Policy.ROUND_ROBIN;
+            case "least_conn" -> Policy.LEAST_CONN;
+            case "random" -> Policy.RANDOM;
+            default -> {
+                System.out.println("No policy specified: " + value + " choose round robin");
+                yield Policy.ROUND_ROBIN;
+            }
+        };
+    }
     private static void startHealthChecks() {
         Thread healthCheckThread = new Thread(() -> {
             while (true) {
@@ -96,12 +123,24 @@ public class ProxyServer {
 
     private static void printHealthStatus() {
         StringBuilder status = new StringBuilder("Health: \r\n");
+        int healthyCount = 0;
+
 
         for (Backend backend : backends) {
-            status.append(backend.port + " ")
-                    .append(backend.healthy ? "UP" : "DOWN")
-                    .append("\r\n");
+            if (backend.healthy) {
+                healthyCount++;
+            }
+
+
+            status.append(backend.port)
+                    .append(backend.healthy ? "UP" : "DOWN");
+            status.append("\r\n");
         }
+
+        status.append("healthy workers: ")
+                .append(healthyCount)
+                .append("/")
+                .append(backends.size());
 
         System.out.println(status);
     }
@@ -170,12 +209,14 @@ public class ProxyServer {
 
 
     private static void forwardToBackend(OutputStream clientOutput, String path) throws IOException {
-        Backend backend = chooseHealthyRoundRobin();
+        Backend backend = chooseBackend();
 
         if (backend == null) {
             sendResponse(clientOutput, 503, "No healthy workers", "No workers are alive");
             return;
         }
+
+        backend.inFlightRequests.incrementAndGet();
 
         System.out.println("Forward to backend: " + path + "to " + backend.host + " port: " + backend.port);
 
@@ -208,8 +249,53 @@ public class ProxyServer {
         } catch (IOException e) {
             backend.healthy = false;
             sendResponse(clientOutput, 502, "Backend request failed", "Backend request failed");
+        }finally {
+            backend.inFlightRequests.decrementAndGet();
         }
     }
+
+    private static Backend chooseBackend () {
+        return switch (policy) {
+            case ROUND_ROBIN -> chooseHealthyRoundRobin();
+            case LEAST_CONN -> chooseHealthyLeastConn();
+            case RANDOM -> chooseRandom();
+        };
+    }
+
+    private static synchronized Backend chooseHealthyLeastConn() {
+        Backend bestBackend = null;
+
+        for (Backend backend : backends) {
+            if (backend.healthy) {
+                continue;
+            }
+
+            if (bestBackend == null || backend.inFlightRequests.get() < bestBackend.inFlightRequests.get()) {
+                bestBackend = backend;
+            }
+        }
+
+        return bestBackend;
+    }
+
+    private static synchronized Backend chooseRandom() {
+
+        List<Backend> healthyBackends = new ArrayList<>();
+
+        for (Backend backend : backends) {
+            if (backend.healthy) {
+                healthyBackends.add(backend);
+            }
+        }
+
+        if(healthyBackends.isEmpty()) {
+            return null;
+        }
+
+        int index = ThreadLocalRandom.current().nextInt(healthyBackends.size());
+        return healthyBackends.get(index);
+    }
+
 
 
     private static synchronized Backend chooseHealthyRoundRobin() {
@@ -232,8 +318,6 @@ public class ProxyServer {
 
         return null;
     }
-
-        // SHOULD I WRITE AGAIN ALL THESE FUNCTIONS OR REUSE THEM (LIKE sendResponse or handleClient)
 
 
         private static void sendResponse(
@@ -260,10 +344,12 @@ public class ProxyServer {
         private final String host;
         private final int port;
         private volatile boolean healthy; //when a change happens in one thread it should let the other threads know to update and not use an old value
+        private final AtomicInteger inFlightRequests;
         private Backend(String host, int port) {
             this.host = host;
             this.port = port;
             this.healthy = false;
+            this.inFlightRequests = new AtomicInteger(0);
         }
 
     }
