@@ -32,3 +32,14 @@ services:
     container_name: lb-worker-3
     ports:
       - "8083:8081"
+
+  benchmark:
+    build:
+      context: .
+      dockerfile: Dockerfile.proxy
+    image: lb-benchmark
+    profiles:
+      - benchmark
+    depends_on:
+      - proxy
+    command: ["java", "-cp", "app.jar", "lb.Benchmark", "http://proxy:8080/work", "1", "10
