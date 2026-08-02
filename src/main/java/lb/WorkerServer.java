@@ -20,7 +20,7 @@ public class WorkerServer {
     public static void main(String[] args) throws IOException {
         int port = args.length > 0 ? Integer.parseInt(args[0]) : DEFAULT_PORT;
 
-        ExecutorService threadPool = Executors.newFixedThreadPool(THREADS);
+        ExecutorService threadPool = Executors.newFixedThreadPool(3);
 
         try(ServerSocket serverSocket = new ServerSocket(port)) {
             System.out.println("Worker listening on port " + port);

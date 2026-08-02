@@ -16,7 +16,7 @@ public class ProxyServer {
     private static final int DEFAULT_PROXY_PORT = 8080;
     private static final int PROXY_THREADS = 20;
     private static final int HEALTH_CHECK_MS = 1000;
-    private static final int HEALTH_CHECK_TIMEOUT_MS = 500;
+    private static final int HEALTH_CHECK_TIMEOUT_MS = 5000;
 
     private static final List<Backend> backends = new ArrayList<>();
     private static int nextBackendIndex = 0;
